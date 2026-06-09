@@ -1,119 +1,441 @@
 # Stage 1
 
-## Notification System Design (Assignment Format)
+## Notification System Design
 
-1. Core Actions
-List notifications
+### Core Actions
+1. List notifications for logged-in users.
+2. Get one notification detail.
+3. Get unread count for badge display.
+4. Mark one notification as read.
+5. Mark all notifications as read.
+6. Delete one notification.
+7. Manage notification preferences.
+8. Receive real-time updates.
 
-Get single notification detail
+### REST API Endpoints
+- `GET /api/v1/notifications?page=1&limit=20&status=all` - list notifications
+- `GET /api/v1/notifications/{id}` - get one notification
+- `GET /api/v1/notifications/unread-count` - unread badge count
+- `PATCH /api/v1/notifications/{id}/read` - mark one as read
+- `PATCH /api/v1/notifications/read-all` - mark all as read
+- `DELETE /api/v1/notifications/{id}` - delete one notification
+- `GET /api/v1/notification-preferences` - fetch preferences
+- `PUT /api/v1/notification-preferences` - update preferences
 
-Get unread count
+### Common Headers
+Request headers:
+```http
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+Accept: application/json
+```
+Response headers:
+```http
+Content-Type: application/json
+X-Request-Id: <uuid>
+```
 
-Mark as read (one/all)
+### Sample JSON
+List response:
+```json
+{"status":"success","data":{"items":[{"id":"ntf_1","title":"new message","message":"you received a message","type":"message","status":"unread","created_at":"2026-06-09T10:30:00Z"}],"pagination":{"page":1,"limit":20,"total":40}}}
+```
+Read request:
+```json
+{"read":true}
+```
+Preferences request:
+```json
+{"channels":{"in_app":true,"email":false,"push":true},"types":{"order":true,"message":true,"promotion":false}}
+```
 
-Delete notification
+### Essential Schemas
+Notification: `id, user_id, title, message, type, status, priority, action_url, metadata, created_at, read_at`
 
-Manage preferences
+Preferences: `channels, types, quiet_hours`
 
-Push real-time notifications
+### Real-Time Mechanism
+Use WebSocket or Socket.IO.
+- Endpoint: `wss://<host>/api/v1/notifications/stream`
+- Client connects after login using JWT.
+- Server sends `notification.created`, `notification.updated`, and `notification.unread_count` events.
+- Client uses heartbeat and auto-reconnect to stay synced.
 
-2. REST Endpoints (Essentials)
-GET /notifications → list
+Stage 2
+1. Database Choice
+Recommended Database: MongoDB
 
-GET /notifications/{id} → detail
+Reasons:
 
-GET /notifications/unread-count → badge
-
-PATCH /notifications/{id}/read → mark read
-
-PATCH /notifications/read-all → mark all read
-
-DELETE /notifications/{id} → delete
-
-GET/PUT /notification-preferences → preferences
-
-3. Schemas
-Notification: id, user_id, title, message, type, status, timestamps
-Preferences: channels, types, quiet_hours
-
-4. Real-Time Mechanism
-WebSocket/Socket.IO stream
-
-Events: created, updated, unread_count
-
-Reliability: heartbeat, auto-reconnect, sync missed data
-
-👉 This condensed view highlights actions, endpoints, schemas, and real-time flow — the backbone of your design without extra detail.
-
-Would you like me to also draw this as a simple architecture diagram so it’s visually easier to present?
-
-write it in 50 lines
-Here’s your notification system design rewritten in about 50 concise lines — keeping only the essentials while still structured clearly:
-
-📌 Notification System Architecture
-1. Core Actions
-List notifications
-
-Get notification detail
-
-Get unread count
-
-Mark one as read
-
-Mark all as read
-
-Delete notification
-
-Manage preferences
-
-Push real-time notifications
-
-2. Headers
-Request: Authorization (JWT), Content-Type, Accept
-Response: Content-Type, X-Request-Id
-
-3. REST Endpoints
-GET /notifications?page&limit&status → list
-
-GET /notifications/{id} → detail
-
-GET /notifications/unread-count → badge
-
-PATCH /notifications/{id}/read → mark read
-
-PATCH /notifications/read-all → mark all read
-
-DELETE /notifications/{id} → delete
-
-GET /notification-preferences → fetch
-
-PUT /notification-preferences → update
-
-4. Sample Responses
-List: items + pagination
-Detail: id, title, message, type, status
-Unread count: integer value
-Mark read: status updated + timestamp
-Delete: deleted_id
-Preferences: channels + types + quiet_hours
-
-5. Schemas
-Notification: id, user_id, title, message, type, status, created_at, read_at
-Preferences: channels, types, quiet_hours
-
-6. Error Format
-{"status":"error",
- "error":{"code":"validation_error","message":"invalid id"}
+Flexible schema for different notification types.
+High write throughput.
+Easy horizontal scaling using sharding.
+JSON-like documents map directly to API responses.
+Supports indexing for fast retrieval.
+2. Database Schema
+notifications Collection
+{
+  "_id": "6658a1234abc",
+  "userId": "USR001",
+  "title": "Order Confirmed",
+  "message": "Your order #1234 has been confirmed",
+  "type": "ORDER",
+  "status": "UNREAD",
+  "priority": "HIGH",
+  "createdAt": "2026-06-09T10:00:00Z",
+  "readAt": null,
+  "metadata": {
+    "orderId": "1234"
+  }
 }
+users Collection
+{
+  "_id": "USR001",
+  "name": "Anubhav Kumar",
+  "email": "anubhav@example.com"
+}
+3. Indexes
+Fetch Notifications Quickly
+db.notifications.createIndex({
+  userId: 1,
+  createdAt: -1
+});
+Fetch Unread Notifications
+db.notifications.createIndex({
+  userId: 1,
+  status: 1
+});
+4. Data Growth Challenges
+Problem 1: Huge Number of Notifications
 
-7. Real-Time Notifications
-WebSocket/Socket.IO stream
+Millions of notifications can slow queries.
 
-Endpoint: wss://host/api/v1/notifications/stream
+Solution:
 
-Events: notification.created, notification.updated, unread_count
+Archive old notifications.
+Add indexes.
+Use pagination.
+Problem 2: Database Storage Growth
 
-Reliability: heartbeat (30s), auto-reconnect, sync missed data
+Storage increases rapidly.
 
-->Conclusion
-Clean REST APIs + WebSocket push → robust, real-time notification system.
+Solution:
+
+db.notifications.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 31536000 }
+);
+
+Automatically removes notifications older than 1 year.
+
+Problem 3: High Read Traffic
+
+Users frequently check notifications.
+
+Solution:
+
+Use Redis caching.
+Store unread counts in cache.
+Problem 4: High Write Traffic
+
+Thousands of notifications generated simultaneously.
+
+Solution:
+
+Use message queues like:
+Apache Kafka
+RabbitMQ
+
+Queue notifications before inserting into MongoDB.
+
+5. NoSQL Queries
+Create Notification
+db.notifications.insertOne({
+  userId: "USR001",
+  title: "Payment Successful",
+  message: "₹500 received",
+  type: "PAYMENT",
+  status: "UNREAD",
+  createdAt: new Date()
+});
+Get User Notifications
+
+Corresponding API:
+
+GET /api/v1/notifications
+
+Query:
+
+db.notifications.find({
+  userId: "USR001"
+}).sort({
+  createdAt: -1
+}).limit(20);
+Get Unread Notifications
+db.notifications.find({
+  userId: "USR001",
+  status: "UNREAD"
+});
+Mark Notification as Read
+
+Corresponding API:
+
+PATCH /api/v1/notifications/:id/read
+
+Query:
+
+db.notifications.updateOne(
+  { _id: ObjectId("6658a1234abc") },
+  {
+    $set: {
+      status: "READ",
+      readAt: new Date()
+    }
+  }
+);
+Mark All Notifications as Read
+db.notifications.updateMany(
+  {
+    userId: "USR001",
+    status: "UNREAD"
+  },
+  {
+    $set: {
+      status: "READ",
+      readAt: new Date()
+    }
+  }
+);
+Delete Notification
+db.notifications.deleteOne({
+  _id: ObjectId("6658a1234abc")
+});
+6. Real-Time Notification Storage Flow
+Application Event
+       │
+       ▼
+ Notification Service
+       │
+       ├── Store in MongoDB
+       │
+       └── Push via WebSocket
+               │
+               ▼
+            Frontend
+
+
+# Stage 3
+
+## Query Review
+
+The given query is logically correct for fetching one student's unread notifications:
+
+
+SELECT * FROM notifications
+WHERE studentID = 1042 AND isRead = false
+ORDER BY createdAt ASC;
+
+
+## Why It Is Slow
+
+1. It may scan a very large number of rows if there is no useful index.
+2. `SELECT *` reads every column, even if the API does not need them all.
+3. `ORDER BY createdAt ASC` can force a sort after filtering.
+4. A boolean filter like `isRead = false` alone is not selective enough.
+
+## What I Would Change
+
+Use a composite index that matches the filter and ordering pattern:
+
+```sql
+CREATE INDEX idx_notifications_student_read_created
+ON notifications (studentID, isRead, createdAt);
+```
+
+Then fetch only the required columns:
+
+```sql
+SELECT notificationID, title, message, notificationType, createdAt
+FROM notifications
+WHERE studentID = 1042 AND isRead = false
+ORDER BY createdAt ASC;
+```
+
+## Likely Computation Cost
+
+- Without a good index: roughly `O(N)` scan plus `O(U log U)` sorting, where `N` is total rows and `U` is unread rows for that student.
+- With the right composite index: closer to `O(log N + U)` because the database can filter and read rows in order more efficiently.
+
+## Are Indexes on Every Column a Good Idea?
+
+No.
+
+- Too many indexes slow down `INSERT`, `UPDATE`, and `DELETE`.
+- They consume extra storage.
+- The database may not use low-value indexes, especially on columns like `isRead`.
+- Indexes should be chosen based on real query patterns, not added everywhere.
+
+## Placement Query
+
+To find all students who got a placement notification in the last 7 days:
+
+```sql
+SELECT DISTINCT studentID
+FROM notifications
+WHERE notificationType = 'Placement'
+  AND createdAt >= NOW() - INTERVAL 7 DAY;
+```
+
+## Conclusion
+
+The query is correct, but it is slow because of poor indexing and extra sorting work. A composite index and selective column retrieval would improve performance a lot.
+
+# Stage 4
+
+## Problem
+
+Notifications are being fetched on every page load for 50,000 students with 5,000,000 notifications. This causes database overload and poor user experience.
+
+## Performance Improvement Strategies
+
+### 1. Client-Side Caching
+
+Store notifications in browser `localStorage` or `sessionStorage`.
+
+```javascript
+// Save notifications
+localStorage.setItem('notifications', JSON.stringify(notifications));
+
+// Load cached notifications on page load
+const cached = JSON.parse(localStorage.getItem('notifications')) || [];
+```
+
+**Tradeoffs:**
+- **Pros:** Zero database calls. Instant page load.
+- **Cons:** Stale data. Loss on browser clear. Multiple devices see different data.
+
+### 2. Server-Side Caching with Redis
+
+Cache unread counts and recent notifications in Redis.
+
+```javascript
+// Cache unread count
+app.get('/api/v1/notifications/unread-count', async (req, res) => {
+  const cacheKey = `unread:${req.user.id}`;
+  let count = await redis.get(cacheKey);
+
+  if (!count) {
+    count = await db.notifications.count({
+      userId: req.user.id,
+      status: 'unread'
+    });
+    await redis.setex(cacheKey, 300, count); // Cache for 5 minutes
+  }
+
+  res.json({ unread_count: count });
+});
+```
+
+**Tradeoffs:**
+- **Pros:** Fast reads. Reduces database load.
+- **Cons:** Additional infrastructure. Cache invalidation challenges. Stale data possible.
+
+### 3. Pagination and Lazy Loading
+
+Fetch only 20-30 notifications per page instead of all.
+
+```sql
+SELECT * FROM notifications
+WHERE userId = :id AND deleted_at IS NULL
+ORDER BY createdAt DESC
+LIMIT 20 OFFSET 0;
+```
+
+**Tradeoffs:**
+- **Pros:** Less data per request. Faster queries.
+- **Cons:** Users must click "Load More". More API calls over time.
+
+### 4. Service Worker & Offline Support
+
+Cache notifications using Service Worker for offline access.
+
+```javascript
+self.addEventListener('install', () => {
+  caches.open('notifications-v1').then(cache => {
+    cache.addAll(['/api/v1/notifications']);
+  });
+});
+```
+
+**Tradeoffs:**
+- **Pros:** Works offline. Faster first load.
+- **Cons:** Complex to implement. Sync challenges.
+
+### 5. Read Replicas
+
+Set up read-only database replicas for notification queries.
+
+```javascript
+// Route reads to replica, writes to primary
+const readDbConnection = createReadReplicaConnection();
+const writeDbConnection = createPrimaryDbConnection();
+```
+
+**Tradeoffs:**
+- **Pros:** Spreads load. Fast reads without slowing writes.
+- **Cons:** High cost. Replication lag. Complexity.
+
+### 6. Pre-Computed Unread Counts
+
+Update unread count in separate denormalized table using background jobs.
+
+```sql
+CREATE TABLE user_notification_counts (
+  userId BIGINT PRIMARY KEY,
+  unreadCount INT,
+  lastUpdated TIMESTAMP
+);
+
+-- Background job runs every 1 minute
+UPDATE user_notification_counts
+SET unreadCount = (
+  SELECT COUNT(*) FROM notifications
+  WHERE userId = user_notification_counts.userId AND status = 'unread'
+);
+```
+
+**Tradeoffs:**
+- **Pros:** O(1) unread count lookup.
+- **Cons:** Extra storage. Eventual consistency (1-min delay).
+
+## Recommended Approach (Hybrid)
+
+Combine multiple strategies:
+
+1. Use **server-side Redis caching** for unread counts (5-minute TTL).
+2. Use **pagination** to fetch 20 notifications per page.
+3. Use **client-side caching** with a `Last-Modified` header to detect changes.
+4. Use **Service Worker** to cache the first page for instant load.
+5. Add **read replicas** only if Redis alone does not solve the issue.
+
+## Cache Invalidation Strategy
+
+When a notification is created, updated, or read:
+
+```javascript
+async function invalidateCache(userId) {
+  await redis.del(`unread:${userId}`);
+  await redis.del(`notifications:${userId}:page:1`);
+}
+```
+
+## Expected Performance Gain
+
+- Without caching: ~500ms per API call.
+- With Redis caching: ~5-10ms per API call (50x faster).
+- With pagination: Reduce payload by 80%.
+- With Service Worker: First load instant (cached).
+
+## Conclusion
+
+A combination of Redis caching, pagination, and client-side strategies will reduce database load significantly and provide a much better user experience.
