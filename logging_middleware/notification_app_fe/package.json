@@ -1,0 +1,11 @@
+{
+  "name": "notification-app-frontend",
+  "version": "1.0.0",
+  "description": "Frontend notification system with caching",
+  "main": "app.js",
+  "scripts": {
+    "start": "npx http-server . -p 8000 -o"
+  },
+  "keywords": ["notification", "frontend"],
+  "license": "MIT"
+}
