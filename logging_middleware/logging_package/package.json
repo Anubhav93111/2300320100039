@@ -1,0 +1,15 @@
+{
+  "name": "@local/logging-middleware",
+  "version": "1.0.0",
+  "description": "Reusable logging package for backend and frontend applications",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "keywords": [
+    "logging",
+    "middleware",
+    "express",
+    "frontend",
+    "backend"
+  ],
+  "license": "MIT"
+}
